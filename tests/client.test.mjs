@@ -50,7 +50,9 @@ function loadBundle() {
 /**
  * Build a settings scope stub over one namespace section.
  * @param options - `user` seeds the overridden layer; `dropWrites` makes every
- * write a silent no-op, which is how the Host rejects a value.
+ * write a silent no-op, which is how the Host rejects a value; `lagUser`
+ * resolves the new value but leaves the raw user layer one revision behind,
+ * which is how a mirror that has not caught up looks.
  * @returns the scope stub plus its recorded writes.
  */
 function makeScope(options = {}) {
@@ -80,7 +82,7 @@ function makeScope(options = {}) {
       snapshot = {
         ...snapshot,
         revision: snapshot.revision + 1,
-        user: { ...snapshot.user, [field]: value },
+        user: options.lagUser === true ? snapshot.user : { ...snapshot.user, [field]: value },
         value: { ...snapshot.value, [field]: value },
       }
       publish()
@@ -89,7 +91,7 @@ function makeScope(options = {}) {
       writes.push(['unset', field])
       if (options.dropWrites === true) { publish(); return }
       const user = { ...snapshot.user }
-      delete user[field]
+      if (options.lagUser !== true) delete user[field]
       snapshot = {
         ...snapshot,
         revision: snapshot.revision + 1,
@@ -366,4 +368,31 @@ test('a rejected save reports failure and shows no confirmation', async () => {
   assert.equal(state.saved, false)
   assert.equal(find(element, node => node.props.className === 'dsccc-saved'), undefined)
   assert.equal(find(element, node => node.props.className === 'dsccc-failed') !== undefined, true)
+})
+
+test('a save is confirmed when only the resolved value has caught up', async () => {
+  // The raw user layer still shows the old section: reading that alone would
+  // report a rejection for a write the Host already accepted.
+  const scope = makeScope({ lagUser: true })
+  const { entry } = mountCard(scope)
+  const face = entry.options.inject()
+  face.edit('triggerPercent', '40')
+  face.save()
+  await settle()
+  const state = face.hooks.contextCompact.getSnapshot()
+  assert.equal(state.failed, false)
+  assert.equal(state.saved, true)
+  assert.equal(state.dirty, false)
+})
+
+test('a reset is confirmed when only the resolved value has caught up', async () => {
+  const scope = makeScope({ user: { triggerPercent: 40 }, lagUser: true })
+  const { entry } = mountCard(scope)
+  const face = entry.options.inject()
+  face.resetField('triggerPercent')
+  face.save()
+  await settle()
+  const state = face.hooks.contextCompact.getSnapshot()
+  assert.equal(state.failed, false)
+  assert.equal(state.saved, true)
 })
