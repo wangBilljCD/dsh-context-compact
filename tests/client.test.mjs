@@ -164,6 +164,15 @@ async function settle() {
 }
 
 /**
+ * Read the text a rendered element carries.
+ * @param node - an element produced by the React stand-in.
+ * @returns the concatenated child text.
+ */
+function text(node) {
+  return (node.children ?? []).join('')
+}
+
+/**
  * Render the card with the given inject face and read its state.
  * @param component - the registered card component.
  * @param face - the inject face from the slot entry.
@@ -301,4 +310,60 @@ test('an unwritable document disables the controls', () => {
   const save = find(element, node => node.props.className === 'dsccc-save')
   assert.equal(save.props.disabled, true)
   assert.equal(find(element, node => node.props.className === 'dsccc-readOnly') !== undefined, true)
+})
+
+test('the save button reads as an action while idle, not as a pending save', () => {
+  const scope = makeScope()
+  const { entry } = mountCard(scope)
+  const face = entry.options.inject()
+  const idle = render(entry.component, face)
+  const idleSave = find(idle.element, node => node.props.className === 'dsccc-save')
+  // The card's copy is locale-selected, so assert against both dictionaries:
+  // the label must be the action, never the in-flight text, at rest.
+  assert.notEqual(text(idleSave), '保存中…')
+  assert.notEqual(text(idleSave), 'Saving…')
+  assert.ok(['保存', 'Save'].includes(text(idleSave)), `unexpected label ${text(idleSave)}`)
+
+  face.edit('triggerPercent', '40')
+  const dirty = render(entry.component, face)
+  const dirtySave = find(dirty.element, node => node.props.className === 'dsccc-save')
+  assert.equal(dirtySave.props.disabled, false)
+  assert.notEqual(text(dirtySave), '保存中…')
+})
+
+test('a landed save is confirmed in the card, and a new draft clears it', async () => {
+  const scope = makeScope()
+  const { entry } = mountCard(scope)
+  const face = entry.options.inject()
+  face.edit('triggerPercent', '40')
+  face.save()
+  await settle()
+
+  const saved = render(entry.component, face)
+  assert.equal(saved.state.saved, true)
+  assert.equal(saved.state.failed, false)
+  assert.equal(saved.state.dirty, false)
+  const note = find(saved.element, node => node.props.className === 'dsccc-saved')
+  assert.ok(note !== undefined, 'the card confirms the landed save')
+  assert.ok(['已保存', 'Saved'].includes(text(note)), `unexpected note ${note === undefined ? 'missing' : text(note)}`)
+
+  face.edit('triggerPercent', '50')
+  const edited = render(entry.component, face)
+  assert.equal(edited.state.saved, false)
+  assert.equal(find(edited.element, node => node.props.className === 'dsccc-saved'), undefined)
+})
+
+test('a rejected save reports failure and shows no confirmation', async () => {
+  const scope = makeScope({ dropWrites: true })
+  const { entry } = mountCard(scope)
+  const face = entry.options.inject()
+  face.edit('triggerPercent', '40')
+  face.save()
+  await settle()
+
+  const { element, state } = render(entry.component, face)
+  assert.equal(state.failed, true)
+  assert.equal(state.saved, false)
+  assert.equal(find(element, node => node.props.className === 'dsccc-saved'), undefined)
+  assert.equal(find(element, node => node.props.className === 'dsccc-failed') !== undefined, true)
 })
