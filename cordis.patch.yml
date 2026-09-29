@@ -1,0 +1,38 @@
+# dsh-context-compact bundle patch.
+#
+# Two rows, in this order:
+#
+# 1. The plugin itself, inserted at the HOST plane so one policy covers every
+#    session regardless of which agent preset that session composed. `config`
+#    is the composition layer of the policy; the user layer above it is the
+#    `context-compact` settings namespace edited from Settings → Plugins.
+#
+#    The row id deliberately differs from the `@local/context-compact` bundle's
+#    `context-compact` row: two bundles inserting one id is a composition
+#    conflict, and both engines would claim the `compaction` service anyway.
+#    Run one of them, not both.
+#
+# 2. The host's `compaction-basic` row disabled. This plugin's engine extends
+#    BasicCompactionEngine, so both classes register the `compaction` service.
+#    Cordis does not fail on that: each row owns its own scope, both engines
+#    activate, and which one a consumer resolves would then depend on
+#    composition order. Disabling the built-in row makes this plugin the single
+#    provider and the replacement deterministic.
+- insert:
+    - id: dsh-context-compact
+      name: 'dsh-context-compact'
+      config:
+        enabled: true
+        # Occupancy at which a pass fires, in percent of the route's context
+        # window. This is the same number the chat input's context meter shows.
+        triggerPercent: 65
+        # Share of the compactable surface summarized per pass, taken from the
+        # oldest end. 25% of a large surface already summarizes a lot of tokens,
+        # and the summary request itself must fit in the remaining window.
+        compactPercent: 25
+        # Summary output cap. The basic engine's default of 8192 truncated
+        # summaries of a large span into an incomplete checkpoint.
+        maxTokens: 16384
+
+- id: compaction-basic
+  disabled: true
