@@ -27,7 +27,8 @@ Harness 里「什么时候压缩、压哪一段」是一个可选能力 seam（`
 
 ```sh
 # 从 git（源码即产物，仓库里已带构建好的 lib/*.js，不需要 prepare/构建授权）
-dsh plugin --profile web add github:<you>/dsh-context-compact
+dsh plugin --profile web add git@github.com:wangBilljCD/dsh-context-compact.git
+# 或 https：dsh plugin --profile web add github:wangBilljCD/dsh-context-compact
 
 # 或从本地目录
 dsh plugin --profile web add ./dsh-context-compact
